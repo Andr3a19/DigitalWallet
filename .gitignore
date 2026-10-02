@@ -1,0 +1,12 @@
+## Cartelle compilate e temporanee
+[Bb]in/
+[Oo]bj/
+.vs/
+.vscode/
+*.user
+*.suo
+
+## Database generato localmente (SQLite)
+*.db
+*.db-shm
+*.db-wal
