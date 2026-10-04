@@ -1,8 +1,8 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using DigitalWallet.Api.Data;
+﻿using DigitalWallet.Api.Data;
 using DigitalWallet.Api.DTOs;
 using DigitalWallet.Api.Models;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace DigitalWallet.Api.Controllers
 {
@@ -16,10 +16,8 @@ namespace DigitalWallet.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateWallet([FromBody] CreateWalletRequest request)
         {
-            if(string.IsNullOrWhiteSpace(request.OwnerName))
-            {
+            if (string.IsNullOrWhiteSpace(request.OwnerName))
                 return BadRequest("Il nome del titolare non può essere vuoto");
-            }
 
             var wallet = new Wallet(request.OwnerName);
             _context.Wallets.Add(wallet);
@@ -32,10 +30,10 @@ namespace DigitalWallet.Api.Controllers
         public async Task<IActionResult> GetWallet(int id)
         {
             var wallet = await _context.Wallets.FindAsync(id);
+
             if (wallet == null)
-            {
                 return NotFound();
-            }
+
             return Ok(wallet);
         }
 
@@ -45,6 +43,27 @@ namespace DigitalWallet.Api.Controllers
         {
             var wallets = await _context.Wallets.ToListAsync();
             return Ok(wallets);
+        }
+
+        // Deposits funds into a wallet, updates balance, and records a deposit transaction
+        [HttpPost("{id}/deposit")]
+        public async Task<IActionResult> Deposit(int id, [FromBody] DepositRequest request)
+        {
+            if (request.Amount <= 0)
+                return BadRequest("L'importo del deposito deve essere maggiore di zero");
+
+            var wallet = await _context.Wallets.FindAsync(id);
+
+            if (wallet == null)
+                return NotFound();
+
+            wallet.Balance += request.Amount;
+
+            string description = string.IsNullOrWhiteSpace(request.Description) ? "Deposito fondi" : request.Description;
+            _context.Transactions.Add(new Transaction(id, request.Amount, TransactionType.Deposito, description));
+
+            await _context.SaveChangesAsync();
+            return Ok(wallet);
         }
     }
 }
