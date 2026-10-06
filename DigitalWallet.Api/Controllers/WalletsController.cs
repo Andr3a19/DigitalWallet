@@ -119,5 +119,18 @@ namespace DigitalWallet.Api.Controllers
                 return StatusCode(500, "Errore interno durante il trasferimento, Operazione annullata");
             }
         }
+
+        // Asynchronously retrieves all transactions for a specific wallet ordered by timestamp descending
+        [HttpGet("{id}/transactions")]
+        public async Task<IActionResult> GetTransactions(int id)
+        {
+            var wallet = await _context.Wallets.FindAsync(id);
+
+            if (wallet == null)
+                return NotFound($"Conto con ID {id} non trovato");
+
+            var transactions = await _context.Transactions.Where(e => e.WalletId == id).OrderByDescending(t => t.TimeStamp).ToListAsync();
+            return Ok(transactions);
+        }
     }
 }
