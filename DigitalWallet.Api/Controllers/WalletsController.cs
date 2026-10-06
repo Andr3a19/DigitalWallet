@@ -65,5 +65,59 @@ namespace DigitalWallet.Api.Controllers
             await _context.SaveChangesAsync();
             return Ok(wallet);
         }
+
+        // Executes an atomic peer-to-peer transfer between two wallets within an ACID database transaction
+        [HttpPost("transfer")]
+        public async Task<IActionResult> Transfer([FromBody] TransferRequest request)
+        {
+            if (request.Amount <= 0)
+                return BadRequest("L'importo del bonifico deve essere maggiore di zero");
+
+            if (request.SourceWalletId == request.DestinationWalletId)
+                return BadRequest("Non puoi effettuare un bonifico verso lo stesso conto");
+
+            var sourceWallet = await _context.Wallets.FindAsync(request.SourceWalletId);
+            var destinationWallet = await _context.Wallets.FindAsync(request.DestinationWalletId);
+
+            if (sourceWallet == null)
+                return NotFound($"Conto mittente con ID {request.SourceWalletId} non trovato");
+
+            if (destinationWallet == null)
+                return NotFound($"Conto destinatario con ID {request.DestinationWalletId} non trovato");
+
+            if (sourceWallet.Balance < request.Amount)
+                return BadRequest("Saldo insufficiente per completare il bonifico");
+
+            using var transaction = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                sourceWallet.Balance -= request.Amount;
+                destinationWallet.Balance += request.Amount;
+
+                string description = string.IsNullOrWhiteSpace(request.Description) ? "Bonifico P2P" : request.Description;
+
+                _context.Transactions.Add(new Transaction(
+                    sourceWallet.Id,
+                    request.Amount,
+                    TransactionType.BonificoInUscita,
+                    $"Inviato a {destinationWallet.OwnerName} (ID {destinationWallet.Id}): {description}"));
+
+                _context.Transactions.Add(new Transaction(
+                    destinationWallet.Id,
+                    request.Amount,
+                    TransactionType.BonificoInEntrata,
+                    $"Ricevuto da {sourceWallet.OwnerName} (ID {sourceWallet.Id}): {description}"));
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return Ok(new { message = "Bonifico eseguito con successo", sourceBalance = sourceWallet.Balance });
+            } catch (Exception)
+            {
+                await transaction.RollbackAsync();
+                return StatusCode(500, "Errore interno durante il trasferimento, Operazione annullata");
+            }
+        }
     }
 }

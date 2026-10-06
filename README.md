@@ -17,6 +17,6 @@ Il progetto implementa un sistema finanziario completo composto da due applicazi
 ## Tabella di Marcia (Roadmap)
 - [x] Setup iniziale del progetto (ASP.NET Core Web API e OpenAPI/Scalar)
 - [x] Definizione dei modelli di dominio (`Wallet`, `Transaction`)
-- [ ] Configurazione del database relazionale (`WalletDbContext` e SQLite)
-- [ ] Implementazione dei Controller REST API (creazione wallet, depositi, trasferimenti)
+- [x] Configurazione del database relazionale (`WalletDbContext` e SQLite)
+- [x] Implementazione dei Controller REST API (creazione wallet, depositi, trasferimenti)
 - [ ] Sviluppo dell'applicazione Client
