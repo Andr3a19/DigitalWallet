@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="DigitalWallet.Api/DigitalWallet.Api.csproj" />
+  <Project Path="DigitalWallet.Client/DigitalWallet.Client.csproj" Id="760d232a-807b-4d4f-9987-e95ce369169c" />
 </Solution>
