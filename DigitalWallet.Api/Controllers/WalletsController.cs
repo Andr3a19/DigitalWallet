@@ -25,6 +25,14 @@ namespace DigitalWallet.Api.Controllers
             return CreatedAtAction(nameof(GetWallet), new { id = wallet.Id }, wallet);
         }
 
+        // Asynchronously retrieves all wallets
+        [HttpGet]
+        public async Task<IActionResult> GetAllWallets()
+        {
+            var wallets = await _context.Wallets.ToListAsync();
+            return Ok(wallets);
+        }
+
         // Asynchronously retrieves a wallet by its primary key, returning 404 NotFound if missing
         [HttpGet("{id}")]
         public async Task<IActionResult> GetWallet(int id)
@@ -35,14 +43,6 @@ namespace DigitalWallet.Api.Controllers
                 return NotFound();
 
             return Ok(wallet);
-        }
-
-        // Asynchronously retrieves all wallets
-        [HttpGet]
-        public async Task<IActionResult> GetAllWallets()
-        {
-            var wallets = await _context.Wallets.ToListAsync();
-            return Ok(wallets);
         }
 
         // Deposits funds into a wallet, updates balance, and records a deposit transaction
@@ -116,7 +116,7 @@ namespace DigitalWallet.Api.Controllers
             } catch (Exception)
             {
                 await transaction.RollbackAsync();
-                return StatusCode(500, "Errore interno durante il trasferimento, Operazione annullata");
+                return StatusCode(500, "Errore interno durante il trasferimento. Operazione annullata");
             }
         }
 
