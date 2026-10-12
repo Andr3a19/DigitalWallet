@@ -2,13 +2,14 @@
 
 Un sistema finanziario distribuito sviluppato in **C# 12** e **.NET** che implementa un'architettura **Client-Server** per la gestione di conti digitali, bonifici e transazioni monetarie protette.
 
-> 📌 **Stato del Progetto:**  
-> • **Versione Beta v0.5 (Core Banking Engine):** Completata ✅  
-> • **Versione v1.0 (Ecosistema Enterprise con Sicurezza & Multi-Valuta):** In fase di sviluppo attivo ⏳
+> **Stato del Progetto:**  
+> • **Versione Beta v0.5 (Core Banking Engine):** Completata
+> • **Versione v0.8 - Sicurezza, Identità & Isolamento Dati:** In fase di sviluppo attivo
+> • **Versione v1.0 (Ecosistema Enterprise con Sicurezza & Multi-Valuta):** In fase di sviluppo
 
 ---
 
-## 🏛️ Visione Architetturale dell'Ecosistema
+## Visione Architetturale dell'Ecosistema
 
 Il sistema è progettato per simulare l'infrastruttura reale di un istituto bancario moderno, separando nettamente il backend dai client dedicati a diversi profili utente:
 
@@ -32,13 +33,13 @@ Il sistema è progettato per simulare l'infrastruttura reale di un istituto banc
             │ • Anagrafica globale     │                                          │ • Login & Profilo sicuro │
             │ • Audit di sistema       │                                          │ • Gestione propri conti  │
             │ • Monitoraggio conti     │                                          │ • Bonifici P2P su IBAN   │
-            │ • Tassi cambio EUR/CHF   │                                          │ • Notifiche accrediti live│
+            │ • Tassi cambio EUR/CHF   │                                          │ • Notifiche accrediti    │
             └──────────────────────────┘                                          └──────────────────────────┘
 ```
 
 ---
 
-## 🗺️ Tabella di Marcia (Roadmap)
+## Tabella di Marcia (Roadmap)
 
 ### [x] Fase 1: Beta v0.5 - Core Banking Engine (Completata)
 *Le fondamenta del motore transazionale e della comunicazione di rete:*
@@ -80,7 +81,7 @@ Il sistema è progettato per simulare l'infrastruttura reale di un istituto banc
 
 ---
 
-## 🛠️ Tecnologie di Riferimento
+## Tecnologie di Riferimento
 
 - **Linguaggio & Runtime:** C# 12 / .NET 10.0 (LTS)
 - **Backend Framework:** ASP.NET Core Web API
@@ -91,7 +92,7 @@ Il sistema è progettato per simulare l'infrastruttura reale di un istituto banc
 
 ---
 
-## ⚙️ Come Avviare la Versione Attuale (Beta v0.5)
+## Come Avviare la Versione Attuale (Beta v0.5)
 
 ### Prerequisiti
 - [.NET SDK 8.0+](https://dotnet.microsoft.com/download) installato sul sistema.
