@@ -1,5 +1,5 @@
-﻿using System.Net.Http.Json;
-using DigitalWallet.Client.Models;
+﻿using DigitalWallet.Client.Models;
+using System.Net.Http.Json;
 
 namespace DigitalWallet.Client.Services
 {
@@ -25,7 +25,8 @@ namespace DigitalWallet.Client.Services
             try
             {
                 return await _httpClient.GetFromJsonAsync<WalletResponse>($"api/wallets/{id}");
-            } catch (HttpRequestException)
+            }
+            catch (HttpRequestException)
             {
                 return null;
             }
@@ -74,7 +75,8 @@ namespace DigitalWallet.Client.Services
             try
             {
                 return await _httpClient.GetFromJsonAsync<List<TransactionResponse>>($"api/wallets/{id}/transactions") ?? [];
-            } catch (HttpRequestException)
+            }
+            catch (HttpRequestException)
             {
                 return [];
             }

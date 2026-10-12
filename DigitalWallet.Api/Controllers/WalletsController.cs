@@ -113,7 +113,8 @@ namespace DigitalWallet.Api.Controllers
                 await transaction.CommitAsync();
 
                 return Ok(new { message = "Bonifico eseguito con successo", sourceBalance = sourceWallet.Balance });
-            } catch (Exception)
+            }
+            catch (Exception)
             {
                 await transaction.RollbackAsync();
                 return StatusCode(500, "Errore interno durante il trasferimento. Operazione annullata");
@@ -129,7 +130,7 @@ namespace DigitalWallet.Api.Controllers
             if (wallet == null)
                 return NotFound($"Conto con ID {id} non trovato");
 
-            var transactions = await _context.Transactions.Where(e => e.WalletId == id).OrderByDescending(t => t.TimeStamp).ToListAsync();
+            var transactions = await _context.Transactions.Where(t => t.WalletId == id).OrderByDescending(t => t.TimeStamp).ToListAsync();
             return Ok(transactions);
         }
     }

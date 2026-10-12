@@ -1,4 +1,5 @@
 ﻿using DigitalWallet.Client.Services;
+using DigitalWallet.Client.Views;
 
 namespace DigitalWallet.Client
 {
@@ -8,21 +9,10 @@ namespace DigitalWallet.Client
         {
             Console.OutputEncoding = System.Text.Encoding.UTF8;
 
-            Console.WriteLine("Digital wallet client");
-            Console.WriteLine("Contattando il server backend via HTTP...\n");
-
             var apiClient = new WalletApiClient();
-            var wallets = await apiClient.GetAllWalletsAsync();
+            var view = new ClientView(apiClient);
 
-            Console.WriteLine($"Risposta ricevuta dal Server! Conti trovati: {wallets.Count}\n");
-
-            foreach (var wallet in wallets)
-            {
-                Console.WriteLine($"• [ID: {wallet.Id}] {wallet.OwnerName,-20} | Saldo: {wallet.Balance:C}");
-            }
-
-            Console.WriteLine("\nPremi un tasto per chiudere...");
-            Console.ReadKey();
+            await view.StartAsync();
         }
     }
 }
