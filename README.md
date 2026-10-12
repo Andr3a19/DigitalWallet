@@ -3,9 +3,9 @@
 Un sistema finanziario distribuito sviluppato in **C# 12** e **.NET** che implementa un'architettura **Client-Server** per la gestione di conti digitali, bonifici e transazioni monetarie protette.
 
 > **Stato del Progetto:**  
-> • **Versione Beta v0.5 (Core Banking Engine):** Completata
-> • **Versione v0.8 - Sicurezza, Identità & Isolamento Dati:** In fase di sviluppo attivo
-> • **Versione v1.0 (Ecosistema Enterprise con Sicurezza & Multi-Valuta):** In fase di sviluppo
+> • **Versione Beta v0.5 (Core Banking Engine):** Completata  
+> • **Versione v0.8 - Sicurezza, Identità & Isolamento Dati:** In fase di sviluppo attivo  
+> • **Versione v1.0 (Ecosistema Enterprise con Sicurezza & Multi-Valuta):** In fase di sviluppo  
 
 ---
 
