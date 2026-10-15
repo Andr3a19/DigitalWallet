@@ -19,7 +19,14 @@ namespace DigitalWallet.Api.Controllers
             if (string.IsNullOrWhiteSpace(request.OwnerName))
                 return BadRequest("Il nome del titolare non può essere vuoto");
 
-            var wallet = new Wallet(request.OwnerName);
+            if (request.UserId <= 0)
+                return BadRequest("L'ID utente non è valido");
+
+            var user = await _context.Users.FindAsync(request.UserId);
+            if (user == null)
+                return NotFound($"Utente con ID {request.UserId} non trovato");
+
+            var wallet = new Wallet(request.UserId, request.OwnerName);
             _context.Wallets.Add(wallet);
             await _context.SaveChangesAsync();
             return CreatedAtAction(nameof(GetWallet), new { id = wallet.Id }, wallet);
@@ -88,34 +95,42 @@ namespace DigitalWallet.Api.Controllers
             if (sourceWallet.Balance < request.Amount)
                 return BadRequest("Saldo insufficiente per completare il bonifico");
 
+            // Begin explicit database transaction for ACID compliance
             using var transaction = await _context.Database.BeginTransactionAsync();
 
             try
             {
+                // 1. Update account balances
                 sourceWallet.Balance -= request.Amount;
                 destinationWallet.Balance += request.Amount;
 
                 string description = string.IsNullOrWhiteSpace(request.Description) ? "Bonifico P2P" : request.Description;
 
+                // 2. Record debit transaction for the sender
                 _context.Transactions.Add(new Transaction(
                     sourceWallet.Id,
                     request.Amount,
                     TransactionType.BonificoInUscita,
                     $"Inviato a {destinationWallet.OwnerName} (ID {destinationWallet.Id}): {description}"));
 
+                // 3. Record credit transaction for the recipient
                 _context.Transactions.Add(new Transaction(
                     destinationWallet.Id,
                     request.Amount,
                     TransactionType.BonificoInEntrata,
                     $"Ricevuto da {sourceWallet.OwnerName} (ID {sourceWallet.Id}): {description}"));
 
+                // 4. Persist pending changes to database
                 await _context.SaveChangesAsync();
+
+                // 5. Commit transaction atomically
                 await transaction.CommitAsync();
 
                 return Ok(new { message = "Bonifico eseguito con successo", sourceBalance = sourceWallet.Balance });
             }
             catch (Exception)
             {
+                // Rollback all database modifications if any step fails
                 await transaction.RollbackAsync();
                 return StatusCode(500, "Errore interno durante il trasferimento. Operazione annullata");
             }

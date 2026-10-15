@@ -1,4 +1,5 @@
 using DigitalWallet.Api.Data;
+using DigitalWallet.Api.Services;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 
@@ -12,6 +13,9 @@ builder.Services.AddControllers();
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+
+// Register password hashing service as singleton
+builder.Services.AddSingleton<IPasswordService, PasswordService>();
 
 var app = builder.Build();
 
