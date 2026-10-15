@@ -4,7 +4,7 @@ Un sistema finanziario distribuito sviluppato in **C# 12** e **.NET** che implem
 
 > **Stato del Progetto:**  
 > • **Versione Beta v0.5 (Core Banking Engine):** Completata  
-> • **Versione v0.8 - Sicurezza, Identità & Isolamento Dati:** In fase di sviluppo attivo  
+> • **Versione v0.8 - Sicurezza, Identità, DLT & Idempotenza:** In fase di sviluppo attivo  
 > • **Versione v1.0 (Ecosistema Enterprise con Sicurezza & Multi-Valuta):** In fase di sviluppo  
 
 ---
@@ -19,6 +19,7 @@ Il sistema è progettato per simulare l'infrastruttura reale di un istituto banc
                                  │  • ASP.NET Core REST API & WebSockets (SignalR) │
                                  │  • Entity Framework Core + SQLite               │
                                  │  • Autenticazione JWT & RBAC (Admin/Customer)   │
+                                 │  • Audit Crittografico SHA-256 & Idempotenza    │
                                  └────────────────────────▲────────────────────────┘
                                                           │
                              Canale HTTP / WebSockets     │     Canale HTTP / WebSockets
@@ -31,8 +32,8 @@ Il sistema è progettato per simulare l'infrastruttura reale di un istituto banc
             │   (Operatore di Banca)   │                                          │     (Cliente Privato)    │
             ├──────────────────────────┤                                          ├──────────────────────────┤
             │ • Anagrafica globale     │                                          │ • Login & Profilo sicuro │
-            │ • Audit di sistema       │                                          │ • Gestione propri conti  │
-            │ • Monitoraggio conti     │                                          │ • Bonifici P2P su IBAN   │
+            │ • Verifica Audit Ledger  │                                          │ • Gestione propri conti  │
+            │ • Monitoraggio conti     │                                          │ • Bonifici P2P con IBAN  │
             │ • Tassi cambio EUR/CHF   │                                          │ • Notifiche accrediti    │
             └──────────────────────────┘                                          └──────────────────────────┘
 ```
@@ -54,16 +55,18 @@ Il sistema è progettato per simulare l'infrastruttura reale di un istituto banc
 
 ---
 
-### [ ] Fase 2: Versione v0.8 - Sicurezza, Identità & Isolamento Dati (In Corso)
-*Trasformazione in un sistema multi-utente conforme alle regole di riservatezza bancaria:*
+### [ ] Fase 2: Versione v0.8 - Sicurezza, Identità, DLT & Idempotenza (In Corso)
+*Protezione avanzata, prevenzione del double-spending e riservatezza bancaria:*
 - [ ] **Modello Utente e Autenticazione:** Introduzione della tabella `Users` con password protette da hashing crittografico a senso unico (PBKDF2/BCrypt, nessuna password in chiaro).
 - [ ] **Autenticazione Stateless con JWT:** Rilascio di JSON Web Token firmati digitalmente all'accesso (`POST /api/auth/login`).
 - [ ] **Role-Based Access Control (RBAC):** Separazione dei ruoli tramite autorizzazioni dedicate:
-  - Ruolo `Admin` per gli impiegati di filiale (accesso a report e viste complessive).
+  - Ruolo `Admin` per gli impiegati di filiale (accesso ad audit completi e viste complessive).
   - Ruolo `Customer` per i clienti privati.
 - [ ] **Data Isolation (Segreto Bancario):** Vincolo di proprietà dei conti (un cliente può consultare ed operare esclusivamente sui propri wallet tramite validazione dei claim del token).
 - [ ] **Relazione 1-a-Molti:** Possibilità per un singolo utente di essere intestatario di più conti.
 - [ ] **Generatore di IBAN:** Assegnazione di codici IBAN fittizi strutturati (es. `IT99DWT...` e `CH99DWT...`) per evitare l'esposizione diretta degli ID sequenziali del database.
+- [ ] **Idempotenza sui Bonifici (Anti Double-Spending):** Tracciamento delle richieste tramite header `Idempotency-Key` (GUID) e tabella dedicata per prevenire addebiti duplicati causati da latenze o retry di rete.
+- [ ] **Audit Trail Crittografico (Blockchain Ledger):** Concatenamento a senso unico delle transazioni tramite hashing SHA-256 (`PreviousHash` e `Hash`) con endpoint dedicato `GET /api/wallets/{id}/verify-audit` per rilevare manomissioni non autorizzate al database SQLite.
 
 ---
 
@@ -73,7 +76,7 @@ Il sistema è progettato per simulare l'infrastruttura reale di un istituto banc
   - Gestione di conti sia in Euro sia in Franchi Svizzeri.
   - Implementazione di un servizio di cambio valuta interno con tassi di conversione per bonifici transfrontalieri.
 - [ ] **Due Client Indipendenti:**
-  - *DigitalWallet.Backoffice:* Console riservata agli operatori di banca per verifiche, anagrafiche e configurazione tassi.
+  - *DigitalWallet.Backoffice:* Console riservata agli operatori di banca per verifiche, anagrafiche, verifica integrità ledger e configurazione tassi.
   - *DigitalWallet.HomeBanking:* Applicazione cliente per autenticazione personale, consultazione del saldo e invio bonifici.
 - [ ] **Notifiche Push in Tempo Reale (SignalR / WebSockets):**
   - Connessione bidirezionale persistente tra Client e Server.
@@ -86,9 +89,10 @@ Il sistema è progettato per simulare l'infrastruttura reale di un istituto banc
 - **Linguaggio & Runtime:** C# 12 / .NET 10.0 (LTS)
 - **Backend Framework:** ASP.NET Core Web API
 - **ORM & Data Access:** Entity Framework Core (EF Core) con provider SQLite
+- **Sicurezza & Crittografia:** JSON Web Token (JWT), Hashing crittografico password, SHA-256 Hash Chaining
 - **Documentazione API:** OpenAPI nativo e interfaccia moderna **Scalar**
-- **Comunicazione di Rete:** `HttpClient`, `System.Net.Http.Json`
-- **Pattern Architetturali:** Client-Server, MVC, DTO Pattern, Repository Pattern, ACID Transactions, RBAC, Pure Dependency Injection
+- **Comunicazione di Rete:** `HttpClient`, `System.Net.Http.Json`, WebSockets (SignalR)
+- **Pattern Architetturali:** Client-Server, MVC, DTO Pattern, Repository Pattern, ACID Transactions, RBAC, Idempotency Pattern, Tamper-Evident Ledger, Pure Dependency Injection
 
 ---
 
