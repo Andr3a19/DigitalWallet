@@ -1,7 +1,10 @@
 using DigitalWallet.Api.Data;
 using DigitalWallet.Api.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,6 +19,33 @@ builder.Services.AddOpenApi();
 
 // Register password hashing service as singleton
 builder.Services.AddSingleton<IPasswordService, PasswordService>();
+
+// Register token generation service for dependency injection
+builder.Services.AddScoped<ITokenService, TokenService>();
+
+// Configure JWT Bearer authentication scheme and token validation rules
+var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+var secretKey = jwtSettings["SecretKey"]
+    ?? throw new InvalidOperationException("La chiave segreta JWT non è configurata.");
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = jwtSettings["Issuer"],
+
+            ValidateAudience = true,
+            ValidAudience = jwtSettings["Audience"],
+
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
+
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero
+        };
+    });
 
 var app = builder.Build();
 
@@ -35,6 +65,8 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+// Enforce authentication before authorization in the middleware pipeline
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();

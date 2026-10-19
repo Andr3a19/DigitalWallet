@@ -57,7 +57,7 @@ Il sistema è progettato per simulare l'infrastruttura reale di un istituto banc
 
 ### [ ] Fase 2: Versione v0.8 - Sicurezza, Identità, DLT & Idempotenza (In Corso)
 *Protezione avanzata, prevenzione del double-spending e riservatezza bancaria:*
-- [ ] **Modello Utente e Autenticazione:** Introduzione della tabella `Users` con password protette da hashing crittografico a senso unico (PBKDF2/BCrypt, nessuna password in chiaro).
+- [x] **Modello Utente e Autenticazione:** Introduzione della tabella `Users` con password protette da hashing crittografico a senso unico (PBKDF2/BCrypt, nessuna password in chiaro).
 - [ ] **Autenticazione Stateless con JWT:** Rilascio di JSON Web Token firmati digitalmente all'accesso (`POST /api/auth/login`).
 - [ ] **Role-Based Access Control (RBAC):** Separazione dei ruoli tramite autorizzazioni dedicate:
   - Ruolo `Admin` per gli impiegati di filiale (accesso ad audit completi e viste complessive).

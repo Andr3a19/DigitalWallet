@@ -1,28 +1,61 @@
-﻿namespace DigitalWallet.Api.Models
+﻿namespace DigitalWallet.Api.Models;
+
+public class Wallet
 {
-    // Domain entity representing a digital bank account
-    public class Wallet
+    public int Id { get; init; }
+
+    // Foreign key referencing User.Id
+    public int UserId { get; init; }
+
+    public string OwnerName { get; private set; } = string.Empty;
+    public string Iban { get; private set; } = string.Empty;
+    public Currency Currency { get; private set; }
+    public decimal Balance { get; private set; }
+    public DateTime CreatedAt { get; init; }
+    public Guid ConcurrencyToken { get; private set; } = Guid.NewGuid();
+
+    // Navigation property pointing to the account owner
+    public User? User { get; init; }
+
+    public Wallet(int userId, string ownerName, string iban, Currency currency = Currency.EUR)
     {
-        public int Id { get; set; }
+        if (userId <= 0)
+            throw new ArgumentException("Lo userId non può essere negativo", nameof(userId));
 
-        // Foreign key referencing User.Id
-        public int UserId { get; set; }
+        if (string.IsNullOrWhiteSpace(ownerName))
+            throw new ArgumentException("Il nome del titolare non può essere vuoto", nameof(ownerName));
 
-        public string OwnerName { get; set; } = string.Empty;
-        public decimal Balance { get; set; }
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        if (string.IsNullOrWhiteSpace(iban))
+            throw new ArgumentException("L'IBAN non può essere vuoto", nameof(iban));
 
-        // Navigation property pointing to the account owner
-        public User? User { get; set; }
+        UserId = userId;
+        OwnerName = ownerName;
+        Iban = iban.Trim().ToUpperInvariant();
+        Currency = currency;
+        Balance = 0.0m;
+        CreatedAt = DateTime.UtcNow;
+    }
 
-        public Wallet(int userId, string ownerName)
-        {
-            UserId = userId;
-            OwnerName = ownerName;
-            Balance = 0.0m;
-            CreatedAt = DateTime.UtcNow;
-        }
+    protected Wallet() { }
 
-        public Wallet() { }
+    public void Credit(decimal amount)
+    {
+        if (amount <= 0)
+            throw new ArgumentOutOfRangeException(nameof(amount), "L'importo da accreditare deve essere maggiore di zero");
+
+        Balance += amount;
+        ConcurrencyToken = Guid.NewGuid();
+    }
+
+    public void Debit(decimal amount)
+    {
+        if (amount <= 0)
+            throw new ArgumentOutOfRangeException(nameof(amount), "L'importo di addebito deve essere rigorosamente maggiore di zero");
+
+        if (amount > Balance)
+            throw new InvalidOperationException($"Fondi insufficienti. Saldo disponibile: {Balance:F2}, richiesto: {amount:F2}");
+
+        Balance -= amount;
+        ConcurrencyToken = Guid.NewGuid();
     }
 }

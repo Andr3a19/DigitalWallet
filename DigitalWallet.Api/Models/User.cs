@@ -1,33 +1,33 @@
-﻿namespace DigitalWallet.Api.Models
+﻿namespace DigitalWallet.Api.Models;
+
+public class User
 {
-    // Roles defining permissions for Role-Based Access Control (RBAC)
-    public enum UserRole
+    public int Id { get; init; }
+    public string Username { get; private set; } = string.Empty;
+    public string FullName { get; private set; } = string.Empty;
+    public string PasswordHash { get; private set; } = string.Empty;
+    public Role Role { get; private set; } = Role.Customer;
+    public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
+
+    private readonly List<Wallet> _wallets = [];
+    public IReadOnlyCollection<Wallet> Wallets => _wallets.AsReadOnly();
+
+    public User(string username, string fullName, string passwordHash, Role role = Role.Customer)
     {
-        Customer,
-        Admin
+        if (string.IsNullOrWhiteSpace(username))
+            throw new ArgumentException("Lo username non può essere vuoto", nameof(username));
+
+        if (string.IsNullOrWhiteSpace(fullName))
+            throw new ArgumentException("Il nome completo non può essere vuoto", nameof(fullName));
+
+        if (string.IsNullOrWhiteSpace(passwordHash))
+            throw new ArgumentException("L'hash della password non può essere vuoto", nameof(passwordHash));
+
+        Username = username.Trim().ToLowerInvariant();
+        FullName = fullName.Trim();
+        PasswordHash = passwordHash;
+        Role = role;
     }
 
-    // Domain entity representing a registered system user
-    public class User
-    {
-        public int Id { get; set; }
-        public string Username { get; set; } = string.Empty;
-        public string FullName { get; set; } = string.Empty;
-        public string PasswordHash { get; set; } = string.Empty;
-        public UserRole Role { get; set; } = UserRole.Customer;
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-
-        // Navigation property: one user can own multiple wallets (1-to-many relationship)
-        public List<Wallet> Wallets { get; set; } = [];
-
-        public User(string username, string fullName, string passwordHash, UserRole role = UserRole.Customer)
-        {
-            Username = username;
-            FullName = fullName;
-            PasswordHash = passwordHash;
-            Role = role;
-        }
-
-        public User() { }
-    }
+    protected User() { }
 }
