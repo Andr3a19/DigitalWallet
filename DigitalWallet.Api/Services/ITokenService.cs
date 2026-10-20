@@ -1,10 +1,8 @@
 ﻿using DigitalWallet.Api.Models;
 
-namespace DigitalWallet.Api.Services
+namespace DigitalWallet.Api.Services;
+
+public interface ITokenService
 {
-    // Contract for generating cryptographically signed JSON Web Tokens (JWT)
-    public interface ITokenService
-    {
-        string GenerateToken(User user);
-    }
+    string GenerateToken(User user);
 }

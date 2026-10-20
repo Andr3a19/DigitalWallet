@@ -1,73 +1,105 @@
 ﻿using DigitalWallet.Api.Data;
 using DigitalWallet.Api.DTOs;
 using DigitalWallet.Api.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace DigitalWallet.Api.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class WalletsController(WalletDbContext context) : ControllerBase
 {
-    private readonly WalletDbContext _context = context;
-
     [HttpPost]
     public async Task<IActionResult> CreateWallet([FromBody] CreateWalletRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.OwnerName))
             return BadRequest("Il nome del titolare non può essere vuoto");
 
-        if (request.UserId <= 0)
-            return BadRequest("L'ID utente non è valido");
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId is null)
+            return Unauthorized();
 
-        var user = await _context.Users.FindAsync(request.UserId);
-        if (user == null)
-            return NotFound($"Utente con ID {request.UserId} non trovato");
+        // Binds the authenticated user identity directly from JWT claims to prevent IDOR vulnerabilities
+        string iban;
+        do
+        {
+            iban = GenerateIban();
+        } while (await context.Wallets.AsNoTracking().AnyAsync(w => w.Iban == iban));
 
-        var temporaryIban = $"IT00DWT{Random.Shared.NextInt64(100000000000, 999999999999)}";
-        var wallet = new Wallet(request.UserId, request.OwnerName, temporaryIban, Currency.EUR);
-        _context.Wallets.Add(wallet);
-        await _context.SaveChangesAsync();
-        return CreatedAtAction(nameof(GetWallet), new { id = wallet.Id }, wallet);
+        var wallet = new Wallet(currentUserId.Value, request.OwnerName, iban, request.Currency);
+
+        context.Wallets.Add(wallet);
+        await context.SaveChangesAsync();
+
+        var response = ToResponseDto(wallet);
+        return CreatedAtAction(nameof(GetWallet), new { id = wallet.Id }, response);
     }
 
     [HttpGet]
     public async Task<IActionResult> GetAllWallets()
     {
-        var wallets = await _context.Wallets.AsNoTracking().ToListAsync();
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId is null)
+            return Unauthorized();
+
+        var isUserAdmin = User.IsInRole(nameof(Role.Admin));
+
+        var query = isUserAdmin
+            ? context.Wallets.AsNoTracking()
+            : context.Wallets.AsNoTracking().Where(w => w.UserId == currentUserId.Value);
+
+        var wallets = await query
+            .Select(w => new WalletResponse(w.Id, w.UserId, w.OwnerName, w.Iban, w.Currency, w.Balance, w.CreatedAt))
+            .ToListAsync();
+
         return Ok(wallets);
     }
 
-    [HttpGet("{id}")]
+    [HttpGet("{id:int}")]
     public async Task<IActionResult> GetWallet(int id)
     {
-        var wallet = await _context.Wallets.AsNoTracking().SingleOrDefaultAsync(w => w.Id == id);
+        var wallet = await context.Wallets.AsNoTracking().SingleOrDefaultAsync(w => w.Id == id);
+        if (wallet is null)
+            return NotFound("Conto non trovato");
 
-        if (wallet == null)
-            return NotFound();
+        if (!IsAuthorizedForWallet(wallet.UserId))
+            return Forbid();
 
-        return Ok(wallet);
+        return Ok(ToResponseDto(wallet));
     }
 
-    [HttpPost("{id}/deposit")]
+    [HttpPost("{id:int}/deposit")]
     public async Task<IActionResult> Deposit(int id, [FromBody] DepositRequest request)
     {
         if (request.Amount <= 0)
             return BadRequest("L'importo del deposito deve essere maggiore di zero");
 
-        var wallet = await _context.Wallets.FindAsync(id);
+        var wallet = await context.Wallets.FindAsync(id);
+        if (wallet is null)
+            return NotFound("Conto non trovato");
 
-        if (wallet == null)
-            return NotFound();
+        if (!IsAuthorizedForWallet(wallet.UserId))
+            return Forbid();
 
         wallet.Credit(request.Amount);
 
-        string description = string.IsNullOrWhiteSpace(request.Description) ? "Deposito fondi" : request.Description;
-        _context.Transactions.Add(new Transaction(id, request.Amount, TransactionType.Deposito, description));
+        var description = string.IsNullOrWhiteSpace(request.Description) ? "Deposito fondi" : request.Description.Trim();
+        context.Transactions.Add(new Transaction(id, request.Amount, TransactionType.Deposito, description));
 
-        await _context.SaveChangesAsync();
-        return Ok(wallet);
+        try
+        {
+            await context.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict("Il conto è stato modificato contemporaneamente da un'altra operazione, riprova");
+        }
+
+        return Ok(ToResponseDto(wallet));
     }
 
     [HttpPost("transfer")]
@@ -79,38 +111,52 @@ public class WalletsController(WalletDbContext context) : ControllerBase
         if (request.SourceWalletId == request.DestinationWalletId)
             return BadRequest("Non puoi effettuare un bonifico verso lo stesso conto");
 
-        var sourceWallet = await _context.Wallets.FindAsync(request.SourceWalletId);
-        var destinationWallet = await _context.Wallets.FindAsync(request.DestinationWalletId);
+        // Enforces deterministic lock ordering by primary key to prevent database deadlocks during concurrent transfers
+        var firstId = Math.Min(request.SourceWalletId, request.DestinationWalletId);
+        var secondId = Math.Max(request.SourceWalletId, request.DestinationWalletId);
 
-        if (sourceWallet == null)
+        var firstWallet = await context.Wallets.FindAsync(firstId);
+        var secondWallet = await context.Wallets.FindAsync(secondId);
+
+        var sourceWallet = request.SourceWalletId == firstId ? firstWallet : secondWallet;
+        var destinationWallet = request.DestinationWalletId == firstId ? firstWallet : secondWallet;
+
+        if (sourceWallet is null)
             return NotFound($"Conto mittente con ID {request.SourceWalletId} non trovato");
 
-        if (destinationWallet == null)
+        if (destinationWallet is null)
             return NotFound($"Conto destinatario con ID {request.DestinationWalletId} non trovato");
 
-        using var transaction = await _context.Database.BeginTransactionAsync();
+        // Verifies wallet ownership via caller identity claims before performing balance mutations
+        if (!IsAuthorizedForWallet(sourceWallet.UserId))
+            return Forbid();
+
+        // Guards against cross-currency transfers until an exchange rate conversion engine is implemented
+        if (sourceWallet.Currency != destinationWallet.Currency)
+            return BadRequest("I bonifici tra conti con valute differenti non sono supportati");
+
+        await using var transaction = await context.Database.BeginTransactionAsync();
 
         try
         {
             sourceWallet.Debit(request.Amount);
             destinationWallet.Credit(request.Amount);
 
-            string description = string.IsNullOrWhiteSpace(request.Description) ? "Bonifico P2P" : request.Description;
+            var description = string.IsNullOrWhiteSpace(request.Description) ? "Bonifico P2P" : request.Description.Trim();
 
-            _context.Transactions.Add(new Transaction(
+            context.Transactions.Add(new Transaction(
                 sourceWallet.Id,
                 request.Amount,
                 TransactionType.BonificoInUscita,
                 $"Inviato a {destinationWallet.OwnerName} (ID {destinationWallet.Id}): {description}"));
 
-            _context.Transactions.Add(new Transaction(
+            context.Transactions.Add(new Transaction(
                 destinationWallet.Id,
                 request.Amount,
                 TransactionType.BonificoInEntrata,
                 $"Ricevuto da {sourceWallet.OwnerName} (ID {sourceWallet.Id}): {description}"));
 
-            await _context.SaveChangesAsync();
-
+            await context.SaveChangesAsync();
             await transaction.CommitAsync();
 
             return Ok(new { message = "Bonifico eseguito con successo", sourceBalance = sourceWallet.Balance });
@@ -120,17 +166,55 @@ public class WalletsController(WalletDbContext context) : ControllerBase
             await transaction.RollbackAsync();
             return BadRequest(ex.Message);
         }
+        catch (DbUpdateConcurrencyException)
+        {
+            await transaction.RollbackAsync();
+            return Conflict("Conflitto di concorrenza rilevato durante il trasferimento, riprova");
+        }
+        catch (Exception)
+        {
+            await transaction.RollbackAsync();
+            return StatusCode(500, "Errore interno durante il trasferimento, operazione annullata");
+        }
     }
 
-    [HttpGet("{id}/transactions")]
+    [HttpGet("{id:int}/transactions")]
     public async Task<IActionResult> GetTransactions(int id)
     {
-        var wallet = await _context.Wallets.FindAsync(id);
-
-        if (wallet == null)
+        var wallet = await context.Wallets.AsNoTracking().FirstOrDefaultAsync(w => w.Id == id);
+        if (wallet is null)
             return NotFound($"Conto con ID {id} non trovato");
 
-        var transactions = await _context.Transactions.AsNoTracking().Where(t => t.WalletId == id).OrderByDescending(t => t.TimeStamp).ToListAsync();
+        if (!IsAuthorizedForWallet(wallet.UserId))
+            return Forbid();
+
+        var transactions = await context.Transactions
+            .AsNoTracking()
+            .Where(t => t.WalletId == id)
+            .OrderByDescending(t => t.Timestamp)
+            .ToListAsync();
+
         return Ok(transactions);
+    }
+
+    private int? GetCurrentUserId()
+    {
+        var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return int.TryParse(claimValue, out var userId) ? userId : null;
+    }
+
+    private bool IsAuthorizedForWallet(int walletOwnerUserId)
+    {
+        var currentUserId = GetCurrentUserId();
+        return currentUserId == walletOwnerUserId || User.IsInRole(nameof(Role.Admin));
+    }
+
+    private static WalletResponse ToResponseDto(Wallet wallet) =>
+        new(wallet.Id, wallet.UserId, wallet.OwnerName, wallet.Iban, wallet.Currency, wallet.Balance, wallet.CreatedAt);
+
+    private static string GenerateIban()
+    {
+        var randomNumeric = Random.Shared.NextInt64(100000000000, 999999999999);
+        return $"IT60X0542811101{randomNumeric}";
     }
 }

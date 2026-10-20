@@ -6,7 +6,7 @@ public class Transaction
     public int WalletId { get; init; }
     public decimal Amount { get; init; }
     public TransactionType Type { get; init; }
-    public DateTime TimeStamp { get; init; } = DateTime.UtcNow;
+    public DateTime Timestamp { get; init; }
     public string Description { get; init; } = string.Empty;
 
     public Transaction(int walletId, decimal amount, TransactionType type, string description)
@@ -23,8 +23,8 @@ public class Transaction
         WalletId = walletId;
         Amount = amount;
         Type = type;
-        TimeStamp = DateTime.UtcNow;
-        Description = description;
+        Timestamp = DateTime.UtcNow;
+        Description = description.Trim();
     }
 
     protected Transaction() { }
