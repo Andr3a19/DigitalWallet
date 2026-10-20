@@ -1,34 +1,31 @@
-﻿namespace DigitalWallet.Api.Models
+﻿namespace DigitalWallet.Api.Models;
+
+public class Transaction
 {
-    // Categorization of ledger transaction types
-    public enum TransactionType
+    public int Id { get; init; }
+    public int WalletId { get; init; }
+    public decimal Amount { get; init; }
+    public TransactionType Type { get; init; }
+    public DateTime TimeStamp { get; init; } = DateTime.UtcNow;
+    public string Description { get; init; } = string.Empty;
+
+    public Transaction(int walletId, decimal amount, TransactionType type, string description)
     {
-        Deposito,
-        BonificoInUscita,
-        BonificoInEntrata
+        if (walletId <= 0)
+            throw new ArgumentException("L'ID del conto deve essere maggiore di zero", nameof(walletId));
+
+        if (amount <= 0)
+            throw new ArgumentOutOfRangeException(nameof(amount), "L'importo deve essere maggiore di zero");
+
+        if (string.IsNullOrWhiteSpace(description))
+            throw new ArgumentException("La descrizione della transazione non può essere vuota", nameof(description));
+
+        WalletId = walletId;
+        Amount = amount;
+        Type = type;
+        TimeStamp = DateTime.UtcNow;
+        Description = description;
     }
 
-    // Domain entity representing an immutable financial ledger movement
-    public class Transaction
-    {
-        public int Id { get; set; }
-        // Foreign key referencing the associated Wallet.Id
-        public int WalletId { get; set; }
-
-        public decimal Amount { get; set; }
-        public TransactionType Type { get; set; }
-        public DateTime TimeStamp { get; set; } = DateTime.UtcNow;
-        public string Description { get; set; } = string.Empty;
-
-        public Transaction(int walletId, decimal amount, TransactionType type, string description)
-        {
-            WalletId = walletId;
-            Amount = amount;
-            Type = type;
-            TimeStamp = DateTime.UtcNow;
-            Description = description;
-        }
-
-        public Transaction() { }
-    }
+    protected Transaction() { }
 }
