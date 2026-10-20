@@ -1,18 +1,19 @@
 ﻿using DigitalWallet.Client.Services;
 using DigitalWallet.Client.Views;
+using System.Text;
 
-namespace DigitalWallet.Client
+namespace DigitalWallet.Client;
+
+internal static class Program
 {
-    class Program
+    private static async Task Main()
     {
-        static async Task Main()
-        {
-            Console.OutputEncoding = System.Text.Encoding.UTF8;
+        Console.OutputEncoding = Encoding.UTF8;
+        Console.InputEncoding = Encoding.UTF8;
 
-            var apiClient = new WalletApiClient();
-            var view = new ClientView(apiClient);
+        var apiClient = new WalletApiClient();
+        var view = new ClientView(apiClient);
 
-            await view.StartAsync();
-        }
+        await view.StartAsync();
     }
 }

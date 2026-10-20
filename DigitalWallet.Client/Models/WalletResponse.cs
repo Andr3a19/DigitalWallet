@@ -1,5 +1,11 @@
-﻿namespace DigitalWallet.Client.Models
-{
-    // Response model representing a wallet entity received from the API
-    public record WalletResponse(int Id, string OwnerName, decimal Balance, DateTime CreatedAt);
-}
+﻿namespace DigitalWallet.Client.Models;
+
+public record WalletResponse(
+    int Id,
+    int UserId,
+    string OwnerName,
+    string Iban,
+    Currency Currency,
+    decimal Balance,
+    DateTime CreatedAt
+);
