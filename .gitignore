@@ -1,12 +1,34 @@
-## Cartelle compilate e temporanee
+## Build artifacts and temporary binaries
 [Bb]in/
 [Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+TestResults/
+
+## Visual Studio & Visual Studio Code
 .vs/
 .vscode/
 *.user
+*.userosv
 *.suo
+*.userprefs
 
-## Database generato localmente (SQLite)
+## JetBrains Rider
+.idea/
+*.sln.iml
+
+## SQLite database and WAL journal files
 *.db
 *.db-shm
 *.db-wal
+*.sqlite
+*.sqlite3
+
+## Local environment overrides and secrets
+appsettings.Local.json
+appsettings.*.local.json
+
+## Operating System temporary files
+.DS_Store
+Thumbs.db
+desktop.ini
