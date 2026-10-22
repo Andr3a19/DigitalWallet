@@ -21,8 +21,8 @@ public class AuthController(WalletDbContext context, IPasswordService passwordSe
             return BadRequest("Tutti i campi sono obbligatori");
         }
 
-        if (request.Password.Length < 6)
-            return BadRequest("La password deve contenere almeno 6 caratteri");
+        if (request.Password.Length < 8)
+            return BadRequest("La password deve contenere almeno 8 caratteri");
 
         var usernameNormalized = request.Username.Trim().ToLowerInvariant();
         var userExists = await context.Users.AsNoTracking().AnyAsync(u => u.Username == usernameNormalized);
@@ -48,7 +48,7 @@ public class AuthController(WalletDbContext context, IPasswordService passwordSe
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
-            return BadRequest("Credenziali non valide");
+            return BadRequest("Username e password sono obbligatori");
 
         var usernameNormalized = request.Username.Trim().ToLowerInvariant();
         var user = await context.Users.SingleOrDefaultAsync(u => u.Username == usernameNormalized);

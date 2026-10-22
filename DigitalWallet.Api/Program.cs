@@ -16,10 +16,15 @@ builder.Services.AddOpenApi();
 
 builder.Services.AddSingleton<IPasswordService, PasswordService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddSingleton<ICurrencyExchangeService, CurrencyExchangeService>();
 
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"]
     ?? throw new InvalidOperationException("La chiave segreta JWT non è configurata");
+
+// HS256 requires a symmetric key of at least 256 bits (32 bytes)
+if (secretKey.Length < 32)
+    throw new InvalidOperationException("La chiave segreta JWT deve essere lunga almeno 32 caratteri");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

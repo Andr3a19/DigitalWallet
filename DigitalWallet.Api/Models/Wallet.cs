@@ -11,7 +11,7 @@ public class Wallet
     public DateTime CreatedAt { get; init; }
     public Guid ConcurrencyToken { get; private set; } = Guid.NewGuid();
 
-    public User? User { get; init; }
+    public User? User { get; private set; }
 
     public Wallet(int userId, string ownerName, string iban, Currency currency = Currency.EUR)
     {

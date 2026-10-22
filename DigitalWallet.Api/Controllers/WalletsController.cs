@@ -1,6 +1,7 @@
 ﻿using DigitalWallet.Api.Data;
 using DigitalWallet.Api.DTOs;
 using DigitalWallet.Api.Models;
+using DigitalWallet.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -11,7 +12,7 @@ namespace DigitalWallet.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
-public class WalletsController(WalletDbContext context) : ControllerBase
+public class WalletsController(WalletDbContext context, ICurrencyExchangeService exchangeService) : ControllerBase
 {
     [HttpPost]
     public async Task<IActionResult> CreateWallet([FromBody] CreateWalletRequest request)
@@ -23,7 +24,7 @@ public class WalletsController(WalletDbContext context) : ControllerBase
         if (currentUserId is null)
             return Unauthorized();
 
-        // Binds the authenticated user identity directly from JWT claims to prevent IDOR vulnerabilities
+        // Generates a synthetic IBAN not compliant with ISO 13616, acceptable for demo purposes only
         string iban;
         do
         {
@@ -66,7 +67,7 @@ public class WalletsController(WalletDbContext context) : ControllerBase
         if (wallet is null)
             return NotFound("Conto non trovato");
 
-        if (!IsAuthorizedForWallet(wallet.UserId))
+        if (!CanReadWallet(wallet.UserId))
             return Forbid();
 
         return Ok(ToResponseDto(wallet));
@@ -97,6 +98,10 @@ public class WalletsController(WalletDbContext context) : ControllerBase
         catch (DbUpdateConcurrencyException)
         {
             return Conflict("Il conto è stato modificato contemporaneamente da un'altra operazione, riprova");
+        }
+        catch (Exception)
+        {
+            return StatusCode(500, "Errore interno durante il deposito, operazione annullata");
         }
 
         return Ok(ToResponseDto(wallet));
@@ -131,16 +136,26 @@ public class WalletsController(WalletDbContext context) : ControllerBase
         if (!IsAuthorizedForWallet(sourceWallet.UserId))
             return Forbid();
 
-        // Guards against cross-currency transfers until an exchange rate conversion engine is implemented
-        if (sourceWallet.Currency != destinationWallet.Currency)
-            return BadRequest("I bonifici tra conti con valute differenti non sono supportati");
+        ExchangeResult exchange;
+        try
+        {
+            exchange = exchangeService.Convert(request.Amount, sourceWallet.Currency, destinationWallet.Currency);
+        }
+        catch (NotSupportedException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+
+        // Cross-currency conversion can round down to zero for very small amounts
+        if (exchange.ConvertedAmount <= 0)
+            return BadRequest("L'importo convertito è troppo piccolo per essere accreditato");
 
         await using var transaction = await context.Database.BeginTransactionAsync();
 
         try
         {
             sourceWallet.Debit(request.Amount);
-            destinationWallet.Credit(request.Amount);
+            destinationWallet.Credit(exchange.ConvertedAmount);
 
             var description = string.IsNullOrWhiteSpace(request.Description) ? "Bonifico P2P" : request.Description.Trim();
 
@@ -152,14 +167,21 @@ public class WalletsController(WalletDbContext context) : ControllerBase
 
             context.Transactions.Add(new Transaction(
                 destinationWallet.Id,
-                request.Amount,
+                exchange.ConvertedAmount,
                 TransactionType.BonificoInEntrata,
                 $"Ricevuto da {sourceWallet.OwnerName} (ID {sourceWallet.Id}): {description}"));
 
             await context.SaveChangesAsync();
             await transaction.CommitAsync();
 
-            return Ok(new { message = "Bonifico eseguito con successo", sourceBalance = sourceWallet.Balance });
+            return Ok(new TransferResponse(
+                "Bonifico eseguito con successo",
+                sourceWallet.Balance,
+                request.Amount,
+                sourceWallet.Currency,
+                exchange.ConvertedAmount,
+                destinationWallet.Currency,
+                exchange.ExchangeRate));
         }
         catch (InvalidOperationException ex)
         {
@@ -185,13 +207,22 @@ public class WalletsController(WalletDbContext context) : ControllerBase
         if (wallet is null)
             return NotFound($"Conto con ID {id} non trovato");
 
-        if (!IsAuthorizedForWallet(wallet.UserId))
+        if (!CanReadWallet(wallet.UserId))
             return Forbid();
 
         var transactions = await context.Transactions
             .AsNoTracking()
             .Where(t => t.WalletId == id)
             .OrderByDescending(t => t.Timestamp)
+            .Select(t => new
+            {
+                t.Id,
+                t.WalletId,
+                t.Amount,
+                t.Type,
+                t.Timestamp,
+                t.Description
+            })
             .ToListAsync();
 
         return Ok(transactions);
@@ -204,6 +235,12 @@ public class WalletsController(WalletDbContext context) : ControllerBase
     }
 
     private bool IsAuthorizedForWallet(int walletOwnerUserId)
+    {
+        var currentUserId = GetCurrentUserId();
+        return currentUserId == walletOwnerUserId;
+    }
+
+    private bool CanReadWallet(int walletOwnerUserId)
     {
         var currentUserId = GetCurrentUserId();
         return currentUserId == walletOwnerUserId || User.IsInRole(nameof(Role.Admin));

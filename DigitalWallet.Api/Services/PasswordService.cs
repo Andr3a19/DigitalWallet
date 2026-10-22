@@ -7,6 +7,7 @@ public class PasswordService : IPasswordService
 {
     private readonly PasswordHasher<User> _passwordHasher = new();
 
+    // PasswordHasher<User> default implementation ignores the user instance
     public string HashPassword(string password) => _passwordHasher.HashPassword(null!, password);
 
     public bool VerifyPassword(string password, string passwordHash)

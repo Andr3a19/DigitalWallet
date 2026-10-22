@@ -86,7 +86,7 @@ public class ClientView(WalletApiClient apiClient)
         var username = EnterString();
 
         Console.Write("Inserisci la password: ");
-        var password = EnterString();
+        var password = EnterPassword();
 
         var (success, message) = await apiClient.LoginAsync(username, password);
         if (success)
@@ -107,17 +107,26 @@ public class ClientView(WalletApiClient apiClient)
         Console.Write("Inserisci il nome e cognome completo: ");
         var fullName = EnterString();
 
-        Console.Write("Inserisci una password (minimo 6 caratteri): ");
+        Console.Write("Inserisci una password (minimo 8 caratteri): ");
         var password = EnterString();
 
         var (success, message) = await apiClient.RegisterAsync(username, fullName, password);
-        Console.WriteLine($"\n{message}");
+        if (success)
+            Console.WriteLine($"\n{message}");
+        else
+            Console.WriteLine($"\nErrore di registrazione: {message}");
     }
 
     private async Task ShowAllWalletsAsync()
     {
-        var wallets = await apiClient.GetAllWalletsAsync();
-        if (wallets.Count == 0)
+        var (wallets, error) = await apiClient.GetAllWalletsAsync();
+        if (error is not null)
+        {
+            Console.WriteLine($"\nErrore: {error}");
+            return;
+        }
+
+        if (wallets is null || wallets.Count == 0)
         {
             Console.WriteLine("\nNessun conto associato al tuo profilo");
             return;
@@ -135,7 +144,13 @@ public class ClientView(WalletApiClient apiClient)
         Console.Write("\nInserisci l'ID del conto: ");
         var id = EnterInt(1);
 
-        var wallet = await apiClient.GetWalletByIdAsync(id);
+        var (wallet, error) = await apiClient.GetWalletByIdAsync(id);
+        if (error is not null)
+        {
+            Console.WriteLine($"\nErrore: {error}");
+            return;
+        }
+
         if (wallet is null)
         {
             Console.WriteLine($"\nNessun conto trovato con ID {id} o accesso non autorizzato");
@@ -209,10 +224,23 @@ public class ClientView(WalletApiClient apiClient)
         Console.Write("Inserisci la causale del bonifico: ");
         var description = Console.ReadLine()?.Trim() ?? string.Empty;
 
-        var (success, message) = await apiClient.TransferAsync(sourceId, destId, amount, description);
+        var (success, transferResult, message) = await apiClient.TransferAsync(sourceId, destId, amount, description);
 
         if (success)
+        {
             Console.WriteLine($"\n{message}");
+
+            if (transferResult == null)
+                return;
+
+            if (transferResult.SourceCurrency != transferResult.DestinationCurrency)
+                Console.WriteLine($"Importo inviato: {transferResult.AmountSent:F2} {transferResult.SourceCurrency} (tasso: {transferResult.ExchangeRate:F4})");
+            else
+                Console.WriteLine($"Importo inviato: {transferResult.AmountSent:F2} {transferResult.SourceCurrency}");
+
+            Console.WriteLine($"Importo ricevuto: {transferResult.AmountReceived:F2} {transferResult.DestinationCurrency}");
+            Console.WriteLine($"Saldo residuo sul conto mittente: {transferResult.SourceBalance:F2} {transferResult.SourceCurrency}");
+        }
         else
             Console.WriteLine($"\nErrore durante il bonifico: {message}");
     }
@@ -222,8 +250,14 @@ public class ClientView(WalletApiClient apiClient)
         Console.Write("\nInserisci l'ID del conto di cui vuoi visualizzare l'estratto conto: ");
         var id = EnterInt(1);
 
-        var transactions = await apiClient.GetTransactionsAsync(id);
-        if (transactions.Count == 0)
+        var (transactions, error) = await apiClient.GetTransactionsAsync(id);
+        if (error is not null)
+        {
+            Console.WriteLine($"\nErrore: {error}");
+            return;
+        }
+
+        if (transactions is null || transactions.Count == 0)
         {
             Console.WriteLine($"\nNessuna transazione trovata per il conto ID {id}");
             return;
@@ -250,6 +284,19 @@ public class ClientView(WalletApiClient apiClient)
         return input;
     }
 
+    private static string EnterPassword()
+    {
+        var input = Console.ReadLine() ?? string.Empty;
+        while (string.IsNullOrWhiteSpace(input))
+        {
+            Console.WriteLine("Il valore inserito non può essere vuoto");
+            Console.Write("Nuovo valore: ");
+            input = Console.ReadLine() ?? string.Empty;
+        }
+
+        return input;
+    }
+
     // Normalizes decimal input to guarantee reliable parsing regardless of operating system culture
     private static decimal EnterDecimal()
     {
@@ -258,8 +305,13 @@ public class ClientView(WalletApiClient apiClient)
             var rawInput = Console.ReadLine()?.Trim() ?? string.Empty;
             var normalizedInput = rawInput.Replace(',', '.');
 
-            if (decimal.TryParse(normalizedInput, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var amount) && amount > 0)
-                return amount;
+            if (decimal.TryParse(normalizedInput, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var parsed))
+            {
+                // Rounds to two decimals to represent currency cents accurately
+                var amount = Math.Round(parsed, 2, MidpointRounding.AwayFromZero);
+                if (amount > 0)
+                    return amount;
+            }
 
             Console.WriteLine("Valore inserito non valido");
             Console.Write("Nuovo valore: ");

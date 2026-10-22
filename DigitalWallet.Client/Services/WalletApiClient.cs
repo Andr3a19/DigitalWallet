@@ -1,6 +1,8 @@
 ﻿using DigitalWallet.Client.Models;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 
 namespace DigitalWallet.Client.Services;
 
@@ -10,10 +12,14 @@ public class WalletApiClient
     public string? CurrentUserFullName { get; private set; }
     public string? CurrentUsername { get; private set; }
 
-    public WalletApiClient()
+    private const string DefaultBaseAddress = "https://localhost:7164";
+
+    public WalletApiClient(string baseUrl)
     {
-        _httpClient = new HttpClient { BaseAddress = new Uri("https://localhost:7164") };
+        _httpClient = new HttpClient { BaseAddress = new Uri(baseUrl) };
     }
+
+    public WalletApiClient() : this(DefaultBaseAddress) { }
 
     // Maps authentication credentials against the API and stores the returned JWT token in memory
     public async Task<(bool Success, string Message)> LoginAsync(string username, string password)
@@ -33,12 +39,15 @@ public class WalletApiClient
                 }
             }
 
-            var error = await response.Content.ReadAsStringAsync();
-            return (false, string.IsNullOrWhiteSpace(error) ? "Credenziali non valide" : error);
+            return (false, await ExtractErrorAsync(response));
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            return (false, $"Errore di connessione al server: {ex.Message}");
+            return (false, $"Server non raggiungibile: {ex.Message}");
+        }
+        catch (JsonException ex)
+        {
+            return (false, $"Risposta non valida dal server: {ex.Message}");
         }
     }
 
@@ -50,12 +59,15 @@ public class WalletApiClient
             if (response.IsSuccessStatusCode)
                 return (true, "Registrazione completata con successo");
 
-            var error = await response.Content.ReadAsStringAsync();
-            return (false, string.IsNullOrWhiteSpace(error) ? "Errore durante la registrazione" : error);
+            return (false, await ExtractErrorAsync(response));
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            return (false, $"Errore di connessione al server: {ex.Message}");
+            return (false, $"Server non raggiungibile: {ex.Message}");
+        }
+        catch (JsonException ex)
+        {
+            return (false, $"Risposta non valida dal server: {ex.Message}");
         }
     }
 
@@ -65,29 +77,14 @@ public class WalletApiClient
         _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
     }
 
-    public async Task<List<WalletResponse>> GetAllWalletsAsync()
-    {
-        try
-        {
-            return await _httpClient.GetFromJsonAsync<List<WalletResponse>>("api/wallets") ?? [];
-        }
-        catch (HttpRequestException)
-        {
-            return [];
-        }
-    }
+    public async Task<(List<WalletResponse>? Data, string? Error)> GetAllWalletsAsync()
+        => await GetAsync<List<WalletResponse>>("api/wallets");
 
-    public async Task<WalletResponse?> GetWalletByIdAsync(int id)
-    {
-        try
-        {
-            return await _httpClient.GetFromJsonAsync<WalletResponse>($"api/wallets/{id}");
-        }
-        catch (HttpRequestException)
-        {
-            return null;
-        }
-    }
+    public async Task<(WalletResponse? Data, string? Error)> GetWalletByIdAsync(int id)
+        => await GetAsync<WalletResponse>($"api/wallets/{id}");
+
+    public async Task<(List<TransactionResponse>? Data, string? Error)> GetTransactionsAsync(int id)
+        => await GetAsync<List<TransactionResponse>>($"api/wallets/{id}/transactions");
 
     public async Task<(bool Success, WalletResponse? Wallet, string Message)> CreateWalletAsync(string ownerName, Currency currency)
     {
@@ -100,13 +97,15 @@ public class WalletApiClient
                 return (true, wallet, "Conto aperto con successo");
             }
 
-            // Extracts detailed backend validation error message when the HTTP request fails
-            var error = await response.Content.ReadAsStringAsync();
-            return (false, null, error);
+            return (false, null, await ExtractErrorAsync(response));
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
             return (false, null, $"Errore di comunicazione: {ex.Message}");
+        }
+        catch (JsonException ex)
+        {
+            return (false, null, $"Risposta non valida dal server: {ex.Message}");
         }
     }
 
@@ -121,16 +120,19 @@ public class WalletApiClient
                 return (true, wallet, "Deposito eseguito con successo");
             }
 
-            var error = await response.Content.ReadAsStringAsync();
-            return (false, null, error);
+            return (false, null, await ExtractErrorAsync(response));
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
             return (false, null, $"Errore di comunicazione: {ex.Message}");
         }
+        catch (JsonException ex)
+        {
+            return (false, null, $"Risposta non valida dal server: {ex.Message}");
+        }
     }
 
-    public async Task<(bool Success, string Message)> TransferAsync(int sourceId, int destId, decimal amount, string? description)
+    public async Task<(bool Success, TransferResponse? Data, string Message)> TransferAsync(int sourceId, int destId, decimal amount, string? description)
     {
         try
         {
@@ -142,27 +144,87 @@ public class WalletApiClient
                 Description = description
             });
 
-            if (response.IsSuccessStatusCode)
-                return (true, "Bonifico completato con successo");
+            if (!response.IsSuccessStatusCode)
+                return (false, null, await ExtractErrorAsync(response));
 
-            var message = await response.Content.ReadAsStringAsync();
-            return (false, message);
+            var result = await response.Content.ReadFromJsonAsync<TransferResponse>();
+            return (true, result, "Bonifico completato con successo");
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            return (false, $"Errore di comunicazione: {ex.Message}");
+            return (false, null, $"Errore di comunicazione: {ex.Message}");
+        }
+        catch (JsonException ex)
+        {
+            return (false, null, $"Risposta non valida dal server: {ex.Message}");
         }
     }
 
-    public async Task<List<TransactionResponse>> GetTransactionsAsync(int id)
+    private async Task<(T? Data, string? Error)> GetAsync<T>(string url)
     {
         try
         {
-            return await _httpClient.GetFromJsonAsync<List<TransactionResponse>>($"api/wallets/{id}/transactions") ?? [];
+            var data = await _httpClient.GetFromJsonAsync<T>(url);
+            return (data, null);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
         {
-            return [];
+            return (default, "Sessione scaduta o non valida, effettua di nuovo il login");
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Forbidden)
+        {
+            return (default, "Non sei autorizzato ad accedere a questa risorsa");
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            // Caller handles not found responses with a custom message
+            return (default, null);
+        }
+        catch (HttpRequestException ex)
+        {
+            // StatusCode can be null when the server is unreachable or the connection fails
+            var statusCode = ex.StatusCode?.ToString() ?? "rete non disponibile";
+            return (default, $"Errore di rete ({statusCode}): {ex.Message}");
+        }
+        catch (JsonException ex)
+        {
+            return (default, $"Risposta non valida dal server: {ex.Message}");
         }
     }
+
+    // Parses ASP.NET Core ProblemDetails to extract a user-friendly error message
+    private static async Task<string> ExtractErrorAsync(HttpResponseMessage response)
+    {
+        var content = await response.Content.ReadAsStringAsync();
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            // Provides meaningful fallback messages for empty challenge responses
+            if (response.StatusCode == HttpStatusCode.Forbidden)
+                return "Non sei autorizzato ad accedere a questa risorsa";
+
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+                return "Sessione scaduta o non valida, effettua di nuovo il login";
+
+            return $"Errore HTTP {(int)response.StatusCode}";
+        }
+
+        try
+        {
+            var problem = JsonSerializer.Deserialize<ProblemDetailsResponse>(content, JsonSerializerOptions.Web);
+
+            if (problem?.Detail != null)
+                return problem.Detail;
+
+            if (problem?.Title != null)
+                return problem.Title;
+        }
+        catch (JsonException)
+        {
+            // Not a ProblemDetails payload, fall through and return the raw content
+        }
+
+        return content;
+    }
+
+    private sealed record ProblemDetailsResponse(string? Title, string? Detail);
 }
