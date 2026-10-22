@@ -5,8 +5,9 @@ Un'applicazione distribuita sviluppata in **C# 14** e **.NET 10 (LTS)** che impl
 > **Stato del Progetto:**  
 > • **Versione v0.5 (Core Transaction Engine):** Completata  
 > • **Versione v0.8 (Sicurezza, RBAC, Concorrenza & Multi-Valuta):** Completata  
-> • **Versione v1.0 (Cambio Valuta, Audit Trail & Notifiche Real-Time):** In fase di sviluppo  
+> • **Versione v1.0 (Cambio Valuta, Recipient Verification, Audit Trail & Real-Time):** In fase di sviluppo  
 >   - Motore di Cambio Valuta: **Completato**  
+>   - Separazione Cambio Interno / Bonifico P2P con Recipient Verification: **In sviluppo**  
 >   - Idempotenza, Audit Trail, Backoffice, SignalR: **In sviluppo**
 
 ---
@@ -111,6 +112,18 @@ In un contesto di produzione si integrerebbe un provider (es. exchangerate-api.c
 
 ### [ ] Fase 3: Versione v1.0 - Integrità dei Dati, Real-Time & Estensioni (In Sviluppo)
 - [x] **Motore di Cambio Valuta:** Servizio di conversione EUR↔CHF con applicazione automatica dei tassi sui bonifici cross-currency, visualizzazione del tasso e dell'importo convertito lato client
+- [ ] **Separazione Cambio Interno / Bonifico P2P con Recipient Verification:** Distinzione di dominio tra due operazioni oggi fuse in un unico endpoint:
+  - Due endpoint dedicati: `POST /api/wallets/exchange` (cambio tra conti propri) e `POST /api/wallets/transfer` (bonifico verso terzi via IBAN), con logica di trasferimento condivisa in `ExecuteTransferAsync`
+  - Nuovi valori `CambioInUscita` / `CambioInEntrata` in `TransactionType` per distinguere il cambio interno dal bonifico P2P nello storico
+  - `TransferRequest` aggiornato: il destinatario P2P è identificato tramite `DestinationIban` (string) invece dell'ID interno
+  - Endpoint `GET /api/wallets/by-iban/{iban}` con DTO ridotto (`OwnerName`, `Currency`, `Iban`) per mostrare in anteprima il titolare del conto prima del bonifico
+  - Endpoint `POST /api/wallets/verify-recipient` con matching tra IBAN e nome digitato dall'utente (**Confirmation of Payee**):
+    - Match esatto case-insensitive → procedi
+    - Close match calcolato con distanza di Levenshtein (soglia ≤ 3) → **blocca** (comportamento scelto: prudente, nessun warning ignorabile)
+    - Nessun match → **blocca**
+  - Client: selezione numerata locale per i conti propri (l'utente sceglie `1`, `2`, `3` e il client mappa agli ID reali), IBAN per il destinatario terzo
+  - Menu ristrutturato con due voci separate: "Cambia valuta tra i tuoi conti" e "Bonifico P2P (IBAN)"
+  - Lavoro suddiviso in 4 commit atomici: selezione numerata (client), endpoint lookup + verification (server + client), split exchange/transfer (server + client), documentazione
 - [ ] **Idempotenza sui Bonifici:** Tracciamento delle richieste tramite header `Idempotency-Key` (GUID) per neutralizzare doppi addebiti in caso di retry di rete
 - [ ] **Audit Log Crittografico (Hash-Chain):** Concatenamento progressivo delle transazioni tramite hashing SHA-256 (`PreviousHash` e `Hash`) per rilevare manomissioni del registro contabile
 - [ ] **Client Dedicato Backoffice:** Seconda interfaccia console riservata ad utenti con ruolo `Admin` per verifiche anagrafiche e audit di sistema
