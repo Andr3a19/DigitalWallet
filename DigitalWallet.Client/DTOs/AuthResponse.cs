@@ -1,3 +1,3 @@
-﻿namespace DigitalWallet.Client.Models;
+﻿namespace DigitalWallet.Client.DTOs;
 
 public record AuthResponse(string Token, int UserId, string Username, string FullName, string Role);

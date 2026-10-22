@@ -1,4 +1,5 @@
-﻿using DigitalWallet.Client.Models;
+﻿using DigitalWallet.Client.DTOs;
+using DigitalWallet.Client.Models;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;

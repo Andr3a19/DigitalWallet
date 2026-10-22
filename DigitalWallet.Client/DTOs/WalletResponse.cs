@@ -1,4 +1,6 @@
-﻿namespace DigitalWallet.Client.Models;
+﻿using DigitalWallet.Client.Models;
+
+namespace DigitalWallet.Client.DTOs;
 
 public record WalletResponse(
     int Id,
