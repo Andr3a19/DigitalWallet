@@ -1,4 +1,5 @@
-﻿using DigitalWallet.Client.Models;
+﻿using DigitalWallet.Client.DTOs;
+using DigitalWallet.Client.Models;
 using DigitalWallet.Client.Services;
 using System.Globalization;
 
@@ -17,7 +18,7 @@ public class ClientView(WalletApiClient apiClient)
         {
             Console.WriteLine($"\nPORTAFOGLIO DIGITALE - Utente: {apiClient.CurrentUserFullName} ({apiClient.CurrentUsername})");
             Console.WriteLine("1. Mostra tutti i miei conti");
-            Console.WriteLine("2. Dettaglio singolo conto (per ID)");
+            Console.WriteLine("2. Dettaglio singolo conto");
             Console.WriteLine("3. Apri nuovo conto");
             Console.WriteLine("4. Deposita fondi");
             Console.WriteLine("5. Effettua bonifico P2P");
@@ -133,31 +134,24 @@ public class ClientView(WalletApiClient apiClient)
         }
 
         Console.WriteLine("\nELENCO CONTI DISPONIBILI");
-        foreach (var wallet in wallets)
+        for (int i = 0; i < wallets.Count; i++)
         {
-            Console.WriteLine($"• [ID: {wallet.Id}] {wallet.OwnerName,-20} | IBAN: {wallet.Iban} | Saldo: {wallet.Balance:F2} {wallet.Currency}");
+            var wallet = wallets[i];
+            Console.WriteLine($"{i + 1}. {wallet.OwnerName,-20} | IBAN: {wallet.Iban} | Saldo: {wallet.Balance:F2} {wallet.Currency}");
         }
     }
 
     private async Task ShowWalletDetailsAsync()
     {
-        Console.Write("\nInserisci l'ID del conto: ");
-        var id = EnterInt(1);
-
-        var (wallet, error) = await apiClient.GetWalletByIdAsync(id);
-        if (error is not null)
-        {
-            Console.WriteLine($"\nErrore: {error}");
-            return;
-        }
+        var wallet = await SelectOwnWalletAsync();
 
         if (wallet is null)
         {
-            Console.WriteLine($"\nNessun conto trovato con ID {id} o accesso non autorizzato");
+            Console.WriteLine("\nOperazione annullata: nessun conto selezionato");
             return;
         }
 
-        Console.WriteLine($"\nDETTAGLIO CONTO [ID: {wallet.Id}]");
+        Console.WriteLine("\nDETTAGLIO CONTO");
         Console.WriteLine($"Titolare: {wallet.OwnerName}");
         Console.WriteLine($"IBAN: {wallet.Iban}");
         Console.WriteLine($"Valuta: {wallet.Currency}");
@@ -184,15 +178,20 @@ public class ClientView(WalletApiClient apiClient)
             return;
         }
 
-        Console.WriteLine($"\nConto aperto con successo, ID assegnato: {newWallet.Id}");
+        Console.WriteLine("\nConto aperto con successo");
         Console.WriteLine($"IBAN generato: {newWallet.Iban}");
         Console.WriteLine($"Valuta: {newWallet.Currency}");
     }
 
     private async Task DepositFundsAsync()
     {
-        Console.Write("\nInserisci l'ID del conto su cui depositare: ");
-        var id = EnterInt(1);
+        var wallet = await SelectOwnWalletAsync();
+
+        if (wallet is null)
+        {
+            Console.WriteLine("\nOperazione annullata: nessun conto selezionato");
+            return;
+        }
 
         Console.Write("Inserisci l'importo da depositare: ");
         var amount = EnterDecimal();
@@ -200,7 +199,7 @@ public class ClientView(WalletApiClient apiClient)
         Console.Write("Inserisci la causale del deposito: ");
         var description = Console.ReadLine()?.Trim() ?? string.Empty;
 
-        var (success, updatedWallet, message) = await apiClient.DepositAsync(id, amount, description);
+        var (success, updatedWallet, message) = await apiClient.DepositAsync(wallet.Id, amount, description);
         if (!success || updatedWallet is null)
         {
             Console.WriteLine($"\nImpossibile effettuare il deposito: {message}");
@@ -212,8 +211,13 @@ public class ClientView(WalletApiClient apiClient)
 
     private async Task TransferFundsAsync()
     {
-        Console.Write("\nInserisci l'ID del conto da cui prelevare: ");
-        var sourceId = EnterInt(1);
+        var sourceWallet = await SelectOwnWalletAsync();
+        if (sourceWallet is null)
+        {
+            Console.WriteLine("\nOperazione annullata: nessun conto selezionato");
+            return;
+        }
+        var sourceId = sourceWallet.Id;
 
         Console.Write("Inserisci l'ID del conto a cui inviare il denaro: ");
         var destId = EnterInt(1);
@@ -230,7 +234,7 @@ public class ClientView(WalletApiClient apiClient)
         {
             Console.WriteLine($"\n{message}");
 
-            if (transferResult == null)
+            if (transferResult is null)
                 return;
 
             if (transferResult.SourceCurrency != transferResult.DestinationCurrency)
@@ -247,10 +251,15 @@ public class ClientView(WalletApiClient apiClient)
 
     private async Task ShowTransactionsAsync()
     {
-        Console.Write("\nInserisci l'ID del conto di cui vuoi visualizzare l'estratto conto: ");
-        var id = EnterInt(1);
+        var wallet = await SelectOwnWalletAsync();
 
-        var (transactions, error) = await apiClient.GetTransactionsAsync(id);
+        if (wallet is null)
+        {
+            Console.WriteLine("\nOperazione annullata: nessun conto selezionato");
+            return;
+        }
+
+        var (transactions, error) = await apiClient.GetTransactionsAsync(wallet.Id);
         if (error is not null)
         {
             Console.WriteLine($"\nErrore: {error}");
@@ -259,7 +268,7 @@ public class ClientView(WalletApiClient apiClient)
 
         if (transactions is null || transactions.Count == 0)
         {
-            Console.WriteLine($"\nNessuna transazione trovata per il conto ID {id}");
+            Console.WriteLine("\nNessuna transazione trovata per il conto selezionato");
             return;
         }
 
@@ -269,6 +278,33 @@ public class ClientView(WalletApiClient apiClient)
             var sign = transaction.Type == TransactionType.BonificoInUscita ? "-" : "+";
             Console.WriteLine($"• {transaction.Timestamp.ToLocalTime():dd/MM/yyyy HH:mm} | [{transaction.Type,-17}] | {sign}{transaction.Amount,8:F2} | {transaction.Description}");
         }
+    }
+
+    private async Task<WalletResponse?> SelectOwnWalletAsync()
+    {
+        var (wallets, error) = await apiClient.GetAllWalletsAsync();
+        if (error is not null)
+        {
+            Console.WriteLine($"\nErrore: {error}");
+            return null;
+        }
+
+        if (wallets is null || wallets.Count == 0)
+        {
+            Console.WriteLine("\nNessun conto associato al tuo profilo");
+            return null;
+        }
+
+        Console.WriteLine("\nSeleziona il conto:");
+        for (int i = 0; i < wallets.Count; i++)
+        {
+            var w = wallets[i];
+            Console.WriteLine($"{i + 1}. Conto {w.Currency} | Saldo: {w.Balance:F2} {w.Currency} | IBAN: {w.Iban}");
+        }
+
+        Console.Write("Scelta: ");
+        var choice = EnterInt(1, wallets.Count);
+        return wallets[choice - 1];
     }
 
     private static string EnterString()
